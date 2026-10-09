@@ -1,0 +1,88 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: europe-central2
+  PYTHON_INDEX: https://europe-central2-python.pkg.dev/pizza-shared-4821/python-libs/simple/
+  IMAGE: europe-central2-docker.pkg.dev/pizza-shared-4821/containers/backend
+  # Workload Identity Federation and the deployer service account live in the gcp repo (envs/shared)
+  WIF_PROVIDER: projects/123456789012/locations/global/workloadIdentityPools/github/providers/github
+  DEPLOYER_SA: gh-backend-deployer@pizza-shared-4821.iam.gserviceaccount.com
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+      - name: Install dependencies (pizza-core from Artifact Registry)
+        run: |
+          pip install keyring keyrings.google-artifactregistry-auth
+          pip install --extra-index-url "$PYTHON_INDEX" -e ".[dev]"
+      - run: ruff check .
+      - run: pytest
+
+  build:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - id: image
+        run: echo "ref=${IMAGE}:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        env:
+          AR_TOKEN: ${{ steps.auth.outputs.access_token }}
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          DOCKER_BUILDKIT=1 docker build --secret id=ar_token,env=AR_TOKEN -t "$IMAGE_REF" .
+          docker push "$IMAGE_REF"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # main -> dev, tags v* -> prod (the prod GitHub environment requires a manual approval)
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+    env:
+      PROJECT: ${{ startsWith(github.ref, 'refs/tags/v') && 'pizza-prod-4821' || 'pizza-dev-4821' }}
+      IMAGE_REF: ${{ needs.build.outputs.image }}
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Run database migrations (Cloud Run job defined in the gcp repo)
+        run: |
+          gcloud run jobs update pizza-backend-migrate --image "$IMAGE_REF" --region "$REGION" --project "$PROJECT"
+          gcloud run jobs execute pizza-backend-migrate --region "$REGION" --project "$PROJECT" --wait
+      - name: Deploy a new revision
+        run: gcloud run deploy pizza-backend --image "$IMAGE_REF" --region "$REGION" --project "$PROJECT"

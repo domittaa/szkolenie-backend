@@ -1,0 +1,15 @@
+# Local PostgreSQL, same major version as Cloud SQL in the gcp repo (POSTGRES_16)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: pizza
+      POSTGRES_PASSWORD: pizza
+      POSTGRES_DB: pizza
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
