@@ -1,7 +1,6 @@
 """Orders API schemas (frontend: ``Order``, ``OrderSummary`` in src/api/types.ts)."""
 
 import uuid
-from datetime import datetime
 from enum import StrEnum
 
 from pizza_core.money import Money
@@ -9,6 +8,7 @@ from pizza_core.pagination import PageParams
 from pydantic import BaseModel, Field
 
 from app.models import Order, OrderItem
+from app.schemas.common import UtcDatetime
 
 # PIZZA-64: max 20 pieces of one item per order (mirrored in frontend src/cart/CartContext.tsx)
 MAX_QUANTITY_PER_ITEM = 20
@@ -69,8 +69,8 @@ class OrderOut(BaseModel):
     promo_code: str | None = None
     delivery_address: str
     phone: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
 
     @classmethod
     def from_model(cls, order: Order) -> "OrderOut":
@@ -96,7 +96,7 @@ class OrderSummaryOut(BaseModel):
     status: OrderStatus
     total: Money
     items_count: int  # number of pieces, not order lines
-    created_at: datetime
+    created_at: UtcDatetime
 
     @classmethod
     def from_model(cls, order: Order) -> "OrderSummaryOut":

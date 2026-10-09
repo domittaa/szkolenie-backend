@@ -24,6 +24,22 @@ def test_menu_is_public_and_hides_unavailable_items(
     assert response.json()[0]["price"] == {"amount": "29.99", "currency": "PLN"}
 
 
+def test_menu_is_sorted_by_category_then_name(client: TestClient, db: Session) -> None:
+    db.add_all(
+        [
+            MenuItem(name="Tiramisu", category="dessert", price_amount=Decimal("16.99")),
+            MenuItem(name="Lemoniada", category="drink", price_amount=Decimal("11.99")),
+            MenuItem(name="Pepperoni", category="pizza", price_amount=Decimal("34.99")),
+            MenuItem(name="Margherita", category="pizza", price_amount=Decimal("29.99")),
+        ]
+    )
+    db.commit()
+
+    names = [item["name"] for item in client.get("/api/v1/menu").json()]
+
+    assert names == ["Margherita", "Pepperoni", "Lemoniada", "Tiramisu"]
+
+
 def test_only_admin_can_create_menu_items(client: TestClient, auth: FakeAuth) -> None:
     payload = {
         "name": "Capricciosa",

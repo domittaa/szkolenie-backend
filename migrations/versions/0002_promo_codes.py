@@ -28,17 +28,18 @@ def upgrade() -> None:
             "discount_percent BETWEEN 1 AND 50", name="ck_promo_codes_discount_percent"
         ),
     )
-    op.add_column(
-        "orders",
-        sa.Column("discount_amount", sa.Numeric(10, 2), nullable=False, server_default="0"),
-    )
-    op.add_column(
-        "orders",
-        sa.Column("promo_code", sa.String(32), sa.ForeignKey("promo_codes.code"), nullable=True),
-    )
+    # batch mode, so that the migration also runs on SQLite (local development)
+    with op.batch_alter_table("orders") as batch_op:
+        batch_op.add_column(
+            sa.Column("discount_amount", sa.Numeric(10, 2), nullable=False, server_default="0")
+        )
+        batch_op.add_column(sa.Column("promo_code", sa.String(32), nullable=True))
+        batch_op.create_foreign_key("fk_orders_promo_code", "promo_codes", ["promo_code"], ["code"])
 
 
 def downgrade() -> None:
-    op.drop_column("orders", "promo_code")
-    op.drop_column("orders", "discount_amount")
+    with op.batch_alter_table("orders") as batch_op:
+        batch_op.drop_constraint("fk_orders_promo_code", type_="foreignkey")
+        batch_op.drop_column("promo_code")
+        batch_op.drop_column("discount_amount")
     op.drop_table("promo_codes")

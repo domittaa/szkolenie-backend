@@ -1,9 +1,9 @@
 """Promo code schemas (frontend: ``PromoCodeValidation`` in src/api/types.ts)."""
 
-from datetime import datetime
-
 from pizza_core.money import Money
 from pydantic import BaseModel, Field
+
+from app.schemas.common import UtcDatetime
 
 
 class PromoCodeValidateRequest(BaseModel):
@@ -15,4 +15,4 @@ class PromoCodeValidateResponse(BaseModel):
     code: str
     discount_percent: int
     discount: Money
-    valid_until: datetime
+    valid_until: UtcDatetime

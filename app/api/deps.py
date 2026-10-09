@@ -11,6 +11,7 @@ from pizza_core.errors import UnauthenticatedError
 from pizza_core.events import EventPublisher
 from sqlalchemy.orm import Session
 
+from app.api.dev_auth import is_dev_token, principal_from_dev_token
 from app.db import get_db
 from app.services.events import get_publisher
 from app.services.order_service import OrderService
@@ -35,10 +36,14 @@ def get_token_verifier() -> TokenVerifier:
 def get_current_principal(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     verifier: Annotated[TokenVerifier, Depends(get_token_verifier)],
+    settings: SettingsDep,
 ) -> Principal:
     if credentials is None:
         raise UnauthenticatedError("Missing bearer token")
-    return verifier.verify(credentials.credentials)
+    token = credentials.credentials
+    if settings.dev_auth_enabled and is_dev_token(token):
+        return principal_from_dev_token(token)
+    return verifier.verify(token)
 
 
 def require_roles(*roles: Role) -> Callable[..., Principal]:

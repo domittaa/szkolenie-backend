@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, status
 from pizza_core.errors import NotFoundError
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import AdminPrincipal, DbSession
@@ -13,12 +13,19 @@ from app.schemas.menu import MenuCategory, MenuItemCreate, MenuItemOut, MenuItem
 
 router = APIRouter(prefix="/menu", tags=["menu"])
 
+# categories in the order of the MenuCategory enum: pizza, side, drink, dessert
+_CATEGORY_ORDER = case(
+    {category.value: rank for rank, category in enumerate(MenuCategory)},
+    value=MenuItem.category,
+    else_=len(MenuCategory),
+)
+
 
 @router.get("", response_model=list[MenuItemOut])
 def list_menu(
     db: DbSession, category: MenuCategory | None = None, available_only: bool = True
 ) -> list[MenuItemOut]:
-    query = select(MenuItem).order_by(MenuItem.category, MenuItem.name)
+    query = select(MenuItem).order_by(_CATEGORY_ORDER, MenuItem.name)
     if category is not None:
         query = query.where(MenuItem.category == category.value)
     if available_only:

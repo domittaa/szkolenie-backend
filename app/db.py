@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from functools import lru_cache
 
 from pizza_core.db import create_db_engine, make_session_factory
-from sqlalchemy import Engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.settings import get_settings
@@ -12,8 +12,11 @@ from app.settings import get_settings
 
 @lru_cache
 def get_engine() -> Engine:
-    settings = get_settings()
-    return create_db_engine(settings.sqlalchemy_url, echo=settings.app_env == "local")
+    url = get_settings().sqlalchemy_url
+    if url.startswith("sqlite"):
+        # local development without PostgreSQL (.env.example), requests run in a thread pool
+        return create_engine(url, connect_args={"check_same_thread": False})
+    return create_db_engine(url)
 
 
 @lru_cache

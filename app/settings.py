@@ -2,13 +2,15 @@
 
 On Cloud Run the variables are set by Terraform in the gcp repo
 (``modules/app-environment/services.tf``, ``local.backend_env``).
-For local development see ``.env.example``.
+For local development see ``.env.example`` (SQLite and dev login, no GCP needed).
 """
 
 from functools import lru_cache
+from typing import Self
 
 from pizza_core.auth import FIREBASE_JWKS_URL
 from pizza_core.db import build_database_url
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +21,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     gcp_project_id: str = "pizza-local"
 
-    # Database: DATABASE_URL wins (local development), otherwise the Cloud SQL socket is used
+    # Database: DATABASE_URL wins (local SQLite or PostgreSQL), otherwise the Cloud SQL socket
     database_url: str | None = None
     db_instance_connection_name: str | None = None
     db_name: str = "pizza"
@@ -30,6 +32,9 @@ class Settings(BaseSettings):
     auth_issuer: str = "https://securetoken.google.com/pizza-local"
     auth_audience: str = "pizza-local"
     auth_jwks_url: str = FIREBASE_JWKS_URL
+    # Local login without Identity Platform: accepts "dev:<user_id>:<role>" bearer tokens
+    # (app/api/dev_auth.py). Refused outside APP_ENV=local/test.
+    dev_auth_enabled: bool = False
 
     # Messaging
     orders_topic: str = "order-events"
@@ -40,6 +45,12 @@ class Settings(BaseSettings):
 
     # Feature flags
     promo_codes_enabled: bool = False  # PIZZA-91
+
+    @model_validator(mode="after")
+    def _dev_auth_only_locally(self) -> Self:
+        if self.dev_auth_enabled and self.app_env not in ("local", "test"):
+            raise ValueError("DEV_AUTH_ENABLED is allowed only with APP_ENV=local or APP_ENV=test")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

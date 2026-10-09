@@ -32,20 +32,26 @@ OpenAPI: `/docs` (disabled in prod). Errors always use the pizza-core envelope
 
 ## Local development
 
-```bash
-docker compose up -d db
-python -m venv .venv && source .venv/bin/activate
-# pizza-core from Artifact Registry...
-pip install --extra-index-url https://europe-central2-python.pkg.dev/pizza-shared-4821/python-libs/simple/ -e ".[dev]"
-# ...or from a local checkout of the core-library repo next to this one
-pip install -e "../core-library[fastapi,pubsub]" -e ".[dev]"
+No Docker and no GCP account needed: SQLite instead of Cloud SQL, in-memory events instead of
+Pub/Sub and a dev login instead of Identity Platform. Requires Python 3.12 and the core-library repo
+checked out next to this one (`../core-library`).
 
-cp .env.example .env
-alembic upgrade head
-python -m scripts.seed
-uvicorn app.main:app --reload   # http://localhost:8000/docs
-pytest
+```bash
+make run        # creates .venv, .env and pizza.db with a sample menu, serves http://localhost:8000/docs
+make test
+make reset-db   # start over with an empty database
 ```
+
+The frontend (`npm run dev` in the frontend repo) logs in with test users, their tokens look like
+`dev:<user>:<role>`:
+
+```bash
+curl -H "Authorization: Bearer dev:kuchnia:staff" localhost:8000/api/v1/orders
+```
+
+`DEV_AUTH_ENABLED` is refused outside `APP_ENV=local`. For PostgreSQL like on Cloud SQL run
+`docker compose up -d db` and set `DATABASE_URL=postgresql+psycopg://pizza:pizza@localhost:5432/pizza`
+in `.env`. CI installs pizza-core from Artifact Registry instead of `../core-library`.
 
 ## Configuration
 
@@ -60,7 +66,8 @@ pytest
 | `ORDERS_TOPIC` | Pub/Sub topic for order events | Terraform |
 | `CORS_ALLOWED_ORIGINS` | Comma separated frontend origins | Terraform (frontend URL + `extra_cors_origins`) |
 | `PROMO_CODES_ENABLED` | Promo codes feature flag | Terraform (tfvars) |
-| `DATABASE_URL`, `USE_INMEMORY_EVENTS` | Local development only | – |
+| `DATABASE_URL`, `USE_INMEMORY_EVENTS` | Local development only (SQLite, no Pub/Sub) | – |
+| `DEV_AUTH_ENABLED` | Accept `dev:<user>:<role>` tokens, refused outside `APP_ENV=local` | – |
 
 ## Contract change checklist
 
