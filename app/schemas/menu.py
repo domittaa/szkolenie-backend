@@ -19,6 +19,7 @@ class MenuCategory(StrEnum):
 class MenuItemOut(BaseModel):
     id: uuid.UUID
     name: str
+    english_name: str
     description: str
     category: MenuCategory
     price: Money
@@ -26,11 +27,13 @@ class MenuItemOut(BaseModel):
     image_url: str | None = None
     tags: list[str] = Field(default_factory=list)
 
+
     @classmethod
     def from_model(cls, item: MenuItem) -> "MenuItemOut":
         return cls(
             id=item.id,
             name=item.name,
+            english_name=item.english_name,
             description=item.description,
             category=MenuCategory(item.category),
             price=Money.of(item.price_amount, item.currency),
